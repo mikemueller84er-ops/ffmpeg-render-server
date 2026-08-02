@@ -9,6 +9,7 @@ const upload = multer({ dest: 'uploads/' });
 
 app.post('/process', upload.single('video'), (req, res) => {
   console.log('Anfrage erhalten. Body:', req.body, 'File:', req.file);
+
   const inputPath = req.file.path;
   const outputPath = `${inputPath}_output.mp4`;
 
@@ -23,7 +24,6 @@ app.post('/process', upload.single('video'), (req, res) => {
   } catch (error) {
     console.error('FEHLER:', error);
     res.status(500).json({ error: error.message });
-  }9
   }
 });
 
