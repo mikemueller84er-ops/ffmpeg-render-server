@@ -1,6 +1,6 @@
 const express = require('express');
 const multer = require('multer');
-const { execSync } = require('child_process');
+const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
@@ -19,18 +19,27 @@ app.post('/process', upload.single('video'), (req, res) => {
   const inputPath = req.file.path;
   const outputPath = `${inputPath}_output.mp4`;
 
-  const command = `ffmpeg -i "${inputPath}" -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920" -y "${outputPath}"`;
+  const args = [
+    '-i', inputPath,
+    '-vf', 'scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920',
+    '-y', outputPath
+  ];
 
-  try {
-    execSync(command);
+  const ffmpeg = spawn('ffmpeg', args);
+
+  let errorOutput = '';
+  ffmpeg.stderr.on('data', (data) => { errorOutput += data.toString(); });
+
+  ffmpeg.on('close', (code) => {
+    if (code !== 0) {
+      console.error('FFmpeg-Fehler:', errorOutput);
+      return res.status(500).json({ error: 'FFmpeg fehlgeschlagen', details: errorOutput });
+    }
     res.download(outputPath, 'output.mp4', () => {
       fs.unlinkSync(inputPath);
       fs.unlinkSync(outputPath);
     });
-  } catch (error) {
-    console.error('FEHLER:', error);
-    res.status(500).json({ error: error.message });
-  }
+  });
 });
 
 app.get('/', (req, res) => res.send('FFmpeg Render Server läuft'));
