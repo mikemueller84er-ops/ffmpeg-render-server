@@ -7,6 +7,7 @@ const path = require('path');
 const app = express();
 app.use(express.json());
 const upload = multer({ dest: 'uploads/' });
+const uploadMultiple = multer({ dest: 'uploads/' });
 
 app.post('/process', upload.single('video'), (req, res) => {
   console.log('Anfrage erhalten. Body:', req.body, 'File:', req.file);
@@ -43,6 +44,46 @@ app.post('/process', upload.single('video'), (req, res) => {
     }
     res.download(outputPath, 'output.mp4', () => {
       fs.unlinkSync(inputPath);
+      fs.unlinkSync(outputPath);
+    });
+  });
+});
+
+app.post('/merge', uploadMultiple.array('videos'), (req, res) => {
+  console.log('Merge-Anfrage erhalten. Anzahl Dateien:', req.files ? req.files.length : 0);
+
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).json({ error: 'Keine Videodateien im Feld "videos" gefunden.' });
+  }
+
+  const listPath = `uploads/concat_list_${Date.now()}.txt`;
+  const listContent = req.files.map(f => `file '${path.resolve(f.path)}'`).join('\n');
+  fs.writeFileSync(listPath, listContent);
+
+  const outputPath = `uploads/merged_${Date.now()}.mp4`;
+
+  const args = [
+    '-f', 'concat',
+    '-safe', '0',
+    '-i', listPath,
+    '-c', 'copy',
+    '-y', outputPath
+  ];
+
+  const ffmpeg = spawn('ffmpeg', args);
+
+  let errorOutput = '';
+  ffmpeg.stderr.on('data', (data) => { errorOutput += data.toString(); });
+
+  ffmpeg.on('close', (code) => {
+    req.files.forEach(f => fs.unlinkSync(f.path));
+    fs.unlinkSync(listPath);
+
+    if (code !== 0) {
+      console.error('FFmpeg-Merge-Fehler (Code ' + code + '):', errorOutput);
+      return res.status(500).json({ error: 'FFmpeg-Merge fehlgeschlagen', code, details: errorOutput });
+    }
+    res.download(outputPath, 'merged.mp4', () => {
       fs.unlinkSync(outputPath);
     });
   });
