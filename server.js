@@ -22,6 +22,12 @@ app.post('/process', upload.single('video'), (req, res) => {
   const args = [
     '-i', inputPath,
     '-vf', 'scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920',
+    '-c:v', 'libx264',
+    '-preset', 'ultrafast',
+    '-crf', '28',
+    '-threads', '1',
+    '-c:a', 'aac',
+    '-b:a', '96k',
     '-y', outputPath
   ];
 
@@ -32,8 +38,8 @@ app.post('/process', upload.single('video'), (req, res) => {
 
   ffmpeg.on('close', (code) => {
     if (code !== 0) {
-      console.error('FFmpeg-Fehler:', errorOutput);
-      return res.status(500).json({ error: 'FFmpeg fehlgeschlagen', details: errorOutput });
+      console.error('FFmpeg-Fehler (Code ' + code + '):', errorOutput);
+      return res.status(500).json({ error: 'FFmpeg fehlgeschlagen', code, details: errorOutput });
     }
     res.download(outputPath, 'output.mp4', () => {
       fs.unlinkSync(inputPath);
@@ -48,5 +54,7 @@ process.on('uncaughtException', (err) => {
   console.error('UNCAUGHT EXCEPTION:', err);
 });
 
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server läuft auf Port ${PORT}`));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server läuft auf Port ${PORT}`));
