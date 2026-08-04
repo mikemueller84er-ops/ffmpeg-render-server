@@ -88,6 +88,63 @@ app.post('/merge', uploadMultiple.array('videos'), (req, res) => {
     });
   });
 });
+app.post('/trim', upload.single('video'), (req, res) => {
+  console.log('Trim-Anfrage erhalten. File:', req.file);
+
+  if (!req.file) {
+    return res.status(400).json({ error: 'Keine Videodatei im Feld "video" gefunden.' });
+  }
+
+  const inputPath = req.file.path;
+  const sceneFilePath = `${inputPath}_scenes.txt`;
+
+  const detectArgs = [
+    '-i', inputPath,
+    '-filter:v', "select='gt(scene,0.15)',metadata=print",
+    '-an', '-f', 'null', '-'
+  ];
+
+  const detect = spawn('ffmpeg', detectArgs);
+  let sceneOutput = '';
+  detect.stderr.on('data', (data) => { sceneOutput += data.toString(); });
+
+  detect.on('close', () => {
+    const timeMatches = [...sceneOutput.matchAll(/pts_time:([0-9.]+)/g)].map(m => parseFloat(m[1]));
+
+    let startTime = 0;
+    if (timeMatches.length > 0) {
+      startTime = timeMatches[Math.floor(timeMatches.length / 2)];
+      startTime = Math.max(0, startTime - 5);
+    }
+
+    const outputPath = `${inputPath}_trimmed.mp4`;
+    const trimArgs = [
+      '-i', inputPath,
+      '-ss', startTime.toString(),
+      '-t', '75',
+      '-c:v', 'libx264',
+      '-preset', 'ultrafast',
+      '-crf', '22',
+      '-c:a', 'aac',
+      '-y', outputPath
+    ];
+
+    const trim = spawn('ffmpeg', trimArgs);
+    let trimError = '';
+    trim.stderr.on('data', (data) => { trimError += data.toString(); });
+
+    trim.on('close', (code) => {
+      fs.unlinkSync(inputPath);
+      if (code !== 0) {
+        console.error('FFmpeg-Trim-Fehler:', trimError);
+        return res.status(500).json({ error: 'Trim fehlgeschlagen', details: trimError });
+      }
+      res.download(outputPath, 'trimmed.mp4', () => {
+        fs.unlinkSync(outputPath);
+      });
+    });
+  });
+});
 
 app.get('/', (req, res) => res.send('FFmpeg Render Server läuft'));
 
