@@ -24,7 +24,7 @@ app.post('/process', upload.single('video'), (req, res) => {
     '-i', inputPath,
     '-vf', 'scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920',
     '-c:v', 'libx264',
-    '-preset', 'fast',
+    '-preset', 'ultrafast',
     '-crf', '22',
     '-threads', '1',
     '-c:a', 'aac',
