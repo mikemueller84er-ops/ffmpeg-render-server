@@ -96,12 +96,13 @@ app.post('/trim', upload.single('video'), (req, res) => {
   }
 
   const inputPath = req.file.path;
-  const sceneFilePath = `${inputPath}_scenes.txt`;
 
   const detectArgs = [
     '-i', inputPath,
-    '-filter:v', "select='gt(scene,0.15)',metadata=print",
-    '-an', '-f', 'null', '-'
+    '-vf', "select='gt(scene,0.3)',metadata=print",
+    '-an', '-f', 'null',
+    '-t', '120',
+    '-'
   ];
 
   const detect = spawn('ffmpeg', detectArgs);
@@ -145,7 +146,6 @@ app.post('/trim', upload.single('video'), (req, res) => {
     });
   });
 });
-
 app.get('/', (req, res) => res.send('FFmpeg Render Server läuft'));
 
 process.on('uncaughtException', (err) => {
