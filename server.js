@@ -109,7 +109,6 @@ app.post('/trim', upload.single('video'), (req, res) => {
       totalDuration = parseInt(durationMatch[1]) * 3600 + parseInt(durationMatch[2]) * 60 + parseFloat(durationMatch[3]);
     }
 
-    // Kurzes Video: unverändert durchreichen, keine Kürzung nötig
     if (totalDuration <= 90) {
       console.log(`Video ist ${totalDuration}s lang – keine Kürzung nötig.`);
       const outputPath = `${inputPath}_trimmed.mp4`;
@@ -125,7 +124,6 @@ app.post('/trim', upload.single('video'), (req, res) => {
       return;
     }
 
-    // Langes Video: Bewegungserkennung + Kürzung
     const detectArgs = [
       '-i', inputPath,
       '-vf', "select='gt(scene,0.3)',metadata=print",
@@ -150,14 +148,13 @@ app.post('/trim', upload.single('video'), (req, res) => {
       const clipLength = Math.min(75, totalDuration - startTime);
 
       const outputPath = `${inputPath}_trimmed.mp4`;
+      // Stream-Copy statt Neuencodierung – deutlich schneller
       const trimArgs = [
-        '-i', inputPath,
         '-ss', startTime.toString(),
+        '-i', inputPath,
         '-t', clipLength.toString(),
-        '-c:v', 'libx264',
-        '-preset', 'ultrafast',
-        '-crf', '22',
-        '-c:a', 'aac',
+        '-c', 'copy',
+        '-avoid_negative_ts', 'make_zero',
         '-y', outputPath
       ];
 
