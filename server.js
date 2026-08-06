@@ -173,6 +173,51 @@ app.post('/trim', upload.single('video'), (req, res) => {
     });
   });
 });
+app.post('/extract-frames', upload.single('video'), (req, res) => {
+  console.log('Frame-Extraktion angefragt. File:', req.file);
+
+  if (!req.file) {
+    return res.status(400).json({ error: 'Keine Videodatei im Feld "video" gefunden.' });
+  }
+
+  const inputPath = req.file.path;
+  const framesDir = `${inputPath}_frames`;
+  fs.mkdirSync(framesDir);
+
+  const args = [
+    '-i', inputPath,
+    '-vf', 'fps=1/2',
+    '-q:v', '5',
+    `${framesDir}/frame_%03d.jpg`
+  ];
+
+  const ffmpeg = spawn('ffmpeg', args);
+  let errorOutput = '';
+  ffmpeg.stderr.on('data', (data) => { errorOutput += data.toString(); });
+
+  ffmpeg.on('close', (code) => {
+    fs.unlinkSync(inputPath);
+
+    if (code !== 0) {
+      console.error('FFmpeg-Frame-Fehler:', errorOutput);
+      return res.status(500).json({ error: 'Frame-Extraktion fehlgeschlagen', details: errorOutput });
+    }
+
+    const files = fs.readdirSync(framesDir).sort();
+    const frames = files.map((filename, index) => {
+      const filePath = `${framesDir}/${filename}`;
+      const base64 = fs.readFileSync(filePath).toString('base64');
+      fs.unlinkSync(filePath);
+      return {
+        timestamp: index * 2,
+        base64: base64
+      };
+    });
+    fs.rmdirSync(framesDir);
+
+    res.json({ frames: frames, count: frames.length });
+  });
+});
 app.get('/', (req, res) => res.send('FFmpeg Render Server läuft'));
 
 process.on('uncaughtException', (err) => {
