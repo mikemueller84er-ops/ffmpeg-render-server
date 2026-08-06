@@ -218,6 +218,42 @@ app.post('/extract-frames', upload.single('video'), (req, res) => {
     res.json({ frames: frames, count: frames.length });
   });
 });
+app.post('/thumbnail', upload.single('video'), (req, res) => {
+  console.log('Thumbnail-Anfrage erhalten. File:', req.file, 'Body:', req.body);
+
+  if (!req.file) {
+    return res.status(400).json({ error: 'Keine Videodatei im Feld "video" gefunden.' });
+  }
+
+  const inputPath = req.file.path;
+  const outputPath = `${inputPath}_thumb.jpg`;
+  const second = req.body.second ? parseFloat(req.body.second) : 1;
+
+  const args = [
+    '-ss', second.toString(),
+    '-i', inputPath,
+    '-vframes', '1',
+    '-q:v', '2',
+    '-y', outputPath
+  ];
+
+  const ffmpeg = spawn('ffmpeg', args);
+
+  let errorOutput = '';
+  ffmpeg.stderr.on('data', (data) => { errorOutput += data.toString(); });
+
+  ffmpeg.on('close', (code) => {
+    fs.unlinkSync(inputPath);
+
+    if (code !== 0) {
+      console.error('FFmpeg-Thumbnail-Fehler (Code ' + code + '):', errorOutput);
+      return res.status(500).json({ error: 'Thumbnail-Erstellung fehlgeschlagen', code, details: errorOutput });
+    }
+    res.download(outputPath, 'thumbnail.jpg', () => {
+      fs.unlinkSync(outputPath);
+    });
+  });
+});
 app.get('/', (req, res) => res.send('FFmpeg Render Server läuft'));
 
 process.on('uncaughtException', (err) => {
