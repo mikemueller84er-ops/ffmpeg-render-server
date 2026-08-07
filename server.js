@@ -3,6 +3,14 @@ const multer = require('multer');
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { google } = require('googleapis');
+
+const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
+const auth = new google.auth.GoogleAuth({
+  credentials,
+  scopes: ['https://www.googleapis.com/auth/drive.readonly'],
+});
+const drive = google.drive({ version: 'v3', auth });
 
 const app = express();
 app.use(express.json());
@@ -253,6 +261,56 @@ app.post('/thumbnail', upload.single('video'), (req, res) => {
       fs.unlinkSync(outputPath);
     });
   });
+});
+app.post('/thumbnail-from-drive', express.json(), async (req, res) => {
+  const { fileId, second } = req.body;
+  console.log('Thumbnail-from-Drive-Anfrage:', fileId, second);
+
+  if (!fileId) {
+    return res.status(400).json({ error: 'Keine fileId übergeben.' });
+  }
+
+  const inputPath = `uploads/drive_${Date.now()}_${fileId}.mp4`;
+  const outputPath = `${inputPath}_thumb.jpg`;
+
+  try {
+    const driveRes = await drive.files.get(
+      { fileId, alt: 'media' },
+      { responseType: 'stream' }
+    );
+
+    const dest = fs.createWriteStream(inputPath);
+    await new Promise((resolve, reject) => {
+      driveRes.data.pipe(dest).on('finish', resolve).on('error', reject);
+    });
+
+    const args = [
+      '-ss', (second ? parseFloat(second) : 1).toString(),
+      '-i', inputPath,
+      '-vframes', '1',
+      '-q:v', '2',
+      '-y', outputPath
+    ];
+
+    const ffmpeg = spawn('ffmpeg', args);
+    let errorOutput = '';
+    ffmpeg.stderr.on('data', (data) => { errorOutput += data.toString(); });
+
+    ffmpeg.on('close', (code) => {
+      fs.unlinkSync(inputPath);
+      if (code !== 0) {
+        console.error('FFmpeg-Fehler:', errorOutput);
+        return res.status(500).json({ error: 'Thumbnail-Erstellung fehlgeschlagen', details: errorOutput });
+      }
+      res.download(outputPath, 'thumbnail.jpg', () => {
+        fs.unlinkSync(outputPath);
+      });
+    });
+  } catch (err) {
+    console.error('Drive-Download-Fehler:', err);
+    if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
+    res.status(500).json({ error: 'Google Drive Download fehlgeschlagen', details: err.message });
+  }
 });
 app.get('/', (req, res) => res.send('FFmpeg Render Server läuft'));
 
