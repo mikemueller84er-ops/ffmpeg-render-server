@@ -264,18 +264,20 @@ app.post('/thumbnail', upload.single('video'), (req, res) => {
 });
 app.post('/thumbnail-from-drive', express.json(), async (req, res) => {
   const { fileId, second } = req.body;
-  console.log('Thumbnail-from-Drive-Anfrage:', fileId, second);
+  const cleanFileId = (fileId || '').trim();   // <-- HIER: neue Zeile, trimmt Leerzeichen weg
 
-  if (!fileId) {
+  console.log('Thumbnail-from-Drive-Anfrage:', cleanFileId, second);
+
+  if (!cleanFileId) {                          // <-- HIER: cleanFileId statt fileId
     return res.status(400).json({ error: 'Keine fileId übergeben.' });
   }
 
-  const inputPath = `uploads/drive_${Date.now()}_${fileId}.mp4`;
+  const inputPath = `uploads/drive_${Date.now()}_${cleanFileId}.mp4`;  // <-- HIER: cleanFileId statt fileId
   const outputPath = `${inputPath}_thumb.jpg`;
 
   try {
     const driveRes = await drive.files.get(
-      { fileId, alt: 'media' },
+      { fileId: cleanFileId, alt: 'media', supportsAllDrives: true },  // <-- HIER: cleanFileId statt fileId, plus supportsAllDrives
       { responseType: 'stream' }
     );
 
